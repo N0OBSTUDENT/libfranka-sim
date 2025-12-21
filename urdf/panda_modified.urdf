@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot name="panda">
-  <link name="panda_link0">
+  <link name="link0">
   	<inertial>
       <origin rpy="0 0 0" xyz="0 0 0.05" />
        <mass value="2.9" />
@@ -21,7 +21,7 @@
       <material name="panda_white" />
     </collision>
   </link>
-  <link name="panda_link1">
+  <link name="link1">
   	<inertial>
       <origin rpy="0 0 0" xyz="0 -0.04 -0.05" />
        <mass value="2.7" />
@@ -43,12 +43,12 @@
   <joint name="joint1" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-2.8973" soft_upper_limit="2.8973" />
     <origin rpy="0 0 0" xyz="0 0 0.333" />
-    <parent link="panda_link0" />
-    <child link="panda_link1" />
+    <parent link="link0" />
+    <child link="link1" />
     <axis xyz="0 0 1" />
     <limit effort="87" lower="-2.9671" upper="2.9671" velocity="2.1750" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link2">
+  <link name="link2">
   	<inertial>
       <origin rpy="0 0 0" xyz="0 -0.04 0.06" />
        <mass value="2.73" />
@@ -70,12 +70,12 @@
   <joint name="joint2" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-1.7628" soft_upper_limit="1.7628" />
     <origin rpy="-1.57079632679 0 0" xyz="0 0 0" />
-    <parent link="panda_link1" />
-    <child link="panda_link2" />
+    <parent link="link1" />
+    <child link="link2" />
     <axis xyz="0 0 1" />
     <limit effort="87" lower="-1.8326" upper="1.8326" velocity="2.1750" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link3">
+  <link name="link3">
 	  <inertial>
       <origin rpy="0 0 0" xyz="0.01 0.01 -0.05" />
        <mass value="2.04" />
@@ -98,12 +98,12 @@
   <joint name="joint3" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-2.8973" soft_upper_limit="2.8973" />
     <origin rpy="1.57079632679 0 0" xyz="0 -0.316 0" />
-    <parent link="panda_link2" />
-    <child link="panda_link3" />
+    <parent link="link2" />
+    <child link="link3" />
     <axis xyz="0 0 1" />
     <limit effort="87" lower="-2.9671" upper="2.9671" velocity="2.1750" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link4">
+  <link name="link4">
   	<inertial>
       <origin rpy="0 0 0" xyz="-0.03 0.03 0.02" />
        <mass value="2.08" />
@@ -125,12 +125,12 @@
   <joint name="joint4" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.0718" soft_upper_limit="-0.0698" />
     <origin rpy="1.57079632679 0 0" xyz="0.0825 0 0" />
-    <parent link="panda_link3" />
-    <child link="panda_link4" />
+    <parent link="link3" />
+    <child link="link4" />
     <axis xyz="0 0 1" />
     <limit effort="87" lower="-3.1416" upper="0.0" velocity="2.1750" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link5">
+  <link name="link5">
   	<inertial>
       <origin rpy="0 0 0" xyz="0 0.04 -0.12" />
        <mass value="3" />
@@ -152,12 +152,12 @@
   <joint name="joint5" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-2.8973" soft_upper_limit="2.8973" />
     <origin rpy="-1.57079632679 0 0" xyz="-0.0825 0.384 0" />
-    <parent link="panda_link4" />
-    <child link="panda_link5" />
+    <parent link="link4" />
+    <child link="link5" />
     <axis xyz="0 0 1" />
     <limit effort="12" lower="-2.9671" upper="2.9671" velocity="2.6100" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link6">
+  <link name="link6">
   	<inertial>
       <origin rpy="0 0 0" xyz="0.04 0 0" />
        <mass value="1.3" />
@@ -179,12 +179,12 @@
   <joint name="joint6" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-0.0175" soft_upper_limit="3.7525" />
     <origin rpy="1.57079632679 0 0" xyz="0 0 0" />
-    <parent link="panda_link5" />
-    <child link="panda_link6" />
+    <parent link="link5" />
+    <child link="link6" />
     <axis xyz="0 0 1" />
     <limit effort="12" lower="-0.0873" upper="3.8223" velocity="2.6100" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link7">
+  <link name="link7">
   	<inertial>
       <origin rpy="0 0 0" xyz="0 0 0.08" />
        <mass value=".2" />
@@ -206,12 +206,12 @@
   <joint name="joint7" type="revolute">
     <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-2.8973" soft_upper_limit="2.8973" />
     <origin rpy="1.57079632679 0 0" xyz="0.088 0 0" />
-    <parent link="panda_link6" />
-    <child link="panda_link7" />
+    <parent link="link6" />
+    <child link="link7" />
     <axis xyz="0 0 1" />
     <limit effort="12" lower="-2.9671" upper="2.9671" velocity="2.6100" />
   <position_based_velocity_limits velocity_offset="0.0" deceleration_limit="10.0" /></joint>
-  <link name="panda_link8">
+  <link name="link8">
   	 <inertial>
       <origin rpy="0 0 0" xyz="0 0 0" />
        <mass value="0.0" />
@@ -220,12 +220,12 @@
   </link>
   <joint name="panda_joint8" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0.107" />
-    <parent link="panda_link7" />
-    <child link="panda_link8" />
+    <parent link="link7" />
+    <child link="link8" />
     <axis xyz="0 0 0" />
   </joint>
-  <joint name="panda_hand_joint" type="fixed">
-    <parent link="panda_link8" />
+  <!-- <joint name="panda_hand_joint" type="fixed">
+    <parent link="link8" />
     <child link="panda_hand" />
     <origin rpy="0 0 -0.785398163397" xyz="0 0 0" />
   </joint>
@@ -331,6 +331,6 @@
     <parent link="panda_hand" />
     <child link="panda_grasptarget" />
     <origin rpy="0 0 0" xyz="0 0 0.105" />
-  </joint>
+  </joint> -->
   
 </robot>
