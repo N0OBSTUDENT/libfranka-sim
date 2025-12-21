@@ -32,7 +32,7 @@ class RobotState:
             "dtheta": [0.0] * 7,  # Motor velocities
             "robot_mode": RobotMode.kIdle.value,  # Store as integer value
             "control_command_success_rate": 0.0,
-            "time": 0.0,
+            "time": 0.0,  # local timestamp only (NOT packed into UDP RobotState)
             # Transformation matrices (4x4 column-major)
             "O_T_EE": [
                 1.0,
@@ -187,73 +187,108 @@ class RobotState:
             ],
             "O_dP_EE_c": [0.0] * 6,
             "O_ddP_EE_c": [0.0] * 6,
-            "motion_generator_mode": 0,
-            "controller_mode": 0,
+            "motion_generator_mode": 0,  # MotionGeneratorMode::kIdle in rbk_types.h
+            "controller_mode": 3,  # ControllerMode::kOther in rbk_types.h
             "reflex_reason": [False] * 41,
+            # IMU blocks required by rbk_types.h (6x3 floats each)
+            "accelerometer_top": [[0.0, 0.0, 0.0] for _ in range(6)],
+            "accelerometer_bottom": [[0.0, 0.0, 0.0] for _ in range(6)],
         }
 
     def pack_state(self) -> bytes:
-        """Pack robot state into binary format for UDP transmission"""
+        """Pack robot state into binary format for UDP transmission (RI RobotState layout)."""
         state = bytearray()
 
-        # Pack state in libfranka-expected order
-        state.extend(struct.pack("<Q", self.state["message_id"]))
-        state.extend(struct.pack("<16d", *self.state["O_T_EE"]))
-        state.extend(struct.pack("<16d", *self.state["O_T_EE_d"]))
-        state.extend(struct.pack("<16d", *self.state["F_T_EE"]))
-        state.extend(struct.pack("<16d", *self.state["EE_T_K"]))
-        state.extend(struct.pack("<16d", *self.state["F_T_NE"]))
-        state.extend(struct.pack("<16d", *self.state["NE_T_EE"]))
-        state.extend(struct.pack("<d", self.state["m_ee"]))
-        state.extend(struct.pack("<9d", *self.state["I_ee"]))
-        state.extend(struct.pack("<3d", *self.state["F_x_Cee"][:3]))
-        state.extend(struct.pack("<d", self.state["m_load"]))
-        state.extend(struct.pack("<9d", *self.state["I_load"]))
-        state.extend(struct.pack("<3d", *self.state["F_x_Cload"][:3]))
-        state.extend(struct.pack("<2d", *self.state["elbow"]))
-        state.extend(struct.pack("<2d", *self.state["elbow_d"]))
-        state.extend(struct.pack("<7d", *self.state["tau_J"]))
-        state.extend(struct.pack("<7d", *self.state["tau_J_d"]))
-        state.extend(struct.pack("<7d", *self.state["dtau_J"]))
-        state.extend(struct.pack("<7d", *self.state["q"]))
-        state.extend(struct.pack("<7d", *self.state["q_d"]))
-        state.extend(struct.pack("<7d", *self.state["dq"]))
-        state.extend(struct.pack("<7d", *self.state["dq_d"]))
-        state.extend(struct.pack("<7d", *self.state["ddq_d"]))
-        state.extend(struct.pack("<7d", *self.state["joint_contact"]))
-        state.extend(struct.pack("<6d", *self.state["cartesian_contact"]))
-        state.extend(struct.pack("<7d", *self.state["joint_collision"]))
-        state.extend(struct.pack("<6d", *self.state["cartesian_collision"]))
-        state.extend(struct.pack("<7d", *self.state["tau_ext_hat_filtered"]))
-        state.extend(struct.pack("<6d", *self.state["O_F_ext_hat_K"]))
-        state.extend(struct.pack("<6d", *self.state["K_F_ext_hat_K"]))
-        state.extend(struct.pack("<6d", *self.state["O_dP_EE_d"]))
-        state.extend(struct.pack("<3d", *self.state["O_ddP_O"][:3]))
-        state.extend(struct.pack("<2d", *self.state["elbow_c"]))
-        state.extend(struct.pack("<2d", *self.state["delbow_c"]))
-        state.extend(struct.pack("<2d", *self.state["ddelbow_c"]))
-        state.extend(struct.pack("<16d", *self.state["O_T_EE_c"]))
-        state.extend(struct.pack("<6d", *self.state["O_dP_EE_c"]))
-        state.extend(struct.pack("<6d", *self.state["O_ddP_EE_c"]))
-        state.extend(struct.pack("<7d", *self.state["theta"]))
-        state.extend(struct.pack("<7d", *self.state["dtheta"]))
-        state.extend(struct.pack("<B", self.state["motion_generator_mode"]))
-        state.extend(struct.pack("<B", self.state["controller_mode"]))
+        # Pack state in libfranka-expected order (0.19 / rbk_types.h)
+        # Note: All numeric arrays here are float32 on wire (NOT float64).
+        state.extend(struct.pack("<Q", int(self.state["message_id"])))
+
+        state.extend(struct.pack("<16f", *map(float, self.state["O_T_EE"])))
+        state.extend(struct.pack("<16f", *map(float, self.state["O_T_EE_d"])))
+        state.extend(struct.pack("<16f", *map(float, self.state["F_T_EE"])))
+        state.extend(struct.pack("<16f", *map(float, self.state["EE_T_K"])))
+        state.extend(struct.pack("<16f", *map(float, self.state["F_T_NE"])))
+        state.extend(struct.pack("<16f", *map(float, self.state["NE_T_EE"])))
+
+        state.extend(struct.pack("<f", float(self.state["m_ee"])))
+        state.extend(struct.pack("<9f", *map(float, self.state["I_ee"])))
+        state.extend(struct.pack("<3f", *map(float, self.state["F_x_Cee"][:3])))
+
+        state.extend(struct.pack("<f", float(self.state["m_load"])))
+        state.extend(struct.pack("<9f", *map(float, self.state["I_load"])))
+        state.extend(struct.pack("<3f", *map(float, self.state["F_x_Cload"][:3])))
+
+        state.extend(struct.pack("<2f", *map(float, self.state["elbow"])))
+        state.extend(struct.pack("<2f", *map(float, self.state["elbow_d"])))
+
+        state.extend(struct.pack("<7f", *map(float, self.state["tau_J"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["tau_J_d"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["dtau_J"])))
+
+        state.extend(struct.pack("<7f", *map(float, self.state["q"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["q_d"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["dq"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["dq_d"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["ddq_d"])))
+
+        state.extend(struct.pack("<7f", *map(float, self.state["joint_contact"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["cartesian_contact"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["joint_collision"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["cartesian_collision"])))
+
+        state.extend(struct.pack("<7f", *map(float, self.state["tau_ext_hat_filtered"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["O_F_ext_hat_K"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["K_F_ext_hat_K"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["O_dP_EE_d"])))
+        state.extend(struct.pack("<3f", *map(float, self.state["O_ddP_O"][:3])))
+
+        state.extend(struct.pack("<2f", *map(float, self.state["elbow_c"])))
+        state.extend(struct.pack("<2f", *map(float, self.state["delbow_c"])))
+        state.extend(struct.pack("<2f", *map(float, self.state["ddelbow_c"])))
+
+        state.extend(struct.pack("<16f", *map(float, self.state["O_T_EE_c"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["O_dP_EE_c"])))
+        state.extend(struct.pack("<6f", *map(float, self.state["O_ddP_EE_c"])))
+
+        state.extend(struct.pack("<7f", *map(float, self.state["theta"])))
+        state.extend(struct.pack("<7f", *map(float, self.state["dtheta"])))
+
+        # accelerometer_top/bottom: 6x3 floats each
+        for i in range(6):
+            state.extend(struct.pack("<3f", *map(float, self.state["accelerometer_top"][i])))
+        for i in range(6):
+            state.extend(struct.pack("<3f", *map(float, self.state["accelerometer_bottom"][i])))
+
+        # Modes are uint8 on wire
+        state.extend(struct.pack("<B", int(self.state["motion_generator_mode"]) & 0xFF))
+        state.extend(struct.pack("<B", int(self.state["controller_mode"]) & 0xFF))
+
+        # bool arrays: pack as uint8 0/1
         state.extend(struct.pack("<41B", *(1 if e else 0 for e in self.state["errors"])))
         state.extend(struct.pack("<41B", *(1 if r else 0 for r in self.state["reflex_reason"])))
-        state.extend(struct.pack("<B", self.state["robot_mode"]))
-        state.extend(struct.pack("<d", self.state["control_command_success_rate"]))
+
+        state.extend(struct.pack("<B", int(self.state["robot_mode"]) & 0xFF))
+
+        # control_command_success_rate is float32 on wire
+        state.extend(struct.pack("<f", float(self.state["control_command_success_rate"])))
 
         return bytes(state)
 
     def update(self):
         """Update the robot state for the next iteration"""
-        self.state["message_id"] = int(time.time() * 1000)
+        # Use a monotonic counter (closer to real robot behavior; avoids timestamp collisions).
+        self.state["message_id"] = (int(self.state["message_id"]) + 1) & 0xFFFFFFFFFFFFFFFF
         self.state["time"] = time.time()
-        if self.state["message_id"] % 1000 == 0:  # Log every 1000 updates
+
+        # Log occasionally (keep old "debug every N" style)
+        if self.state["message_id"] % 1000 == 0:
+            try:
+                mode_name = RobotMode(int(self.state["robot_mode"])).name
+            except Exception:
+                mode_name = str(self.state["robot_mode"])
             logger.debug(
                 f"Robot state updated: message_id={self.state['message_id']}, "
-                f"mode={RobotMode(self.state['robot_mode']).name}, "
+                f"mode={mode_name}, "
                 f"controller_mode={self.state['controller_mode']}, "
                 f"motion_generator_mode={self.state['motion_generator_mode']}"
             )
@@ -266,8 +301,8 @@ class RobotState:
 
     def set_motion_generator_mode(self, mode: int):
         """Set motion generator mode and store as integer value"""
-        self.state["motion_generator_mode"] = mode
+        self.state["motion_generator_mode"] = int(mode)
 
     def set_controller_mode(self, mode: int):
         """Set controller mode and store as integer value"""
-        self.state["controller_mode"] = mode
+        self.state["controller_mode"] = int(mode)

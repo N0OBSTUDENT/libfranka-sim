@@ -208,8 +208,8 @@ class FrankaSimServer:
             poller.register(self.udp_socket.fileno(), select.POLLIN)
             logger.debug(f"Poller: {poller}")
             timeout = 1  # 1ms timeout
-
             while self.running:
+                command = None 
                 events = poller.poll(timeout)
                 if not events:
                     continue
@@ -299,10 +299,10 @@ class FrankaSimServer:
                             self.genesis_sim.update_joint_positions(current_joint_positions)
                             self.genesis_sim.update_torques([0.0] * 7)
 
-                        # Update state to idle modes
-                        self.robot_state.state["motion_generator_mode"] = 0  # kIdle
-                        self.robot_state.state["controller_mode"] = 3  # kOther
-                        self.robot_state.state["robot_mode"] = RobotMode.kIdle
+                        # # Update state to idle modes
+                        # self.robot_state.state["motion_generator_mode"] = 0  # kIdle
+                        # self.robot_state.state["controller_mode"] = 3  # kOther
+                        # self.robot_state.state["robot_mode"] = RobotMode.kIdle
 
                         # Send state with new message ID
                         self.robot_state.update()  # This increments message_id
@@ -311,20 +311,8 @@ class FrankaSimServer:
                             final_state, (self.client_address, self.client_udp_port)
                         )
 
-                        # Send TCP success response for the Move command
-                        if self.current_motion_id:
-                            total_size = 12 + 4  # Header (12) + status (1) + padding (3)
-                            response_header = MessageHeader(
-                                Command.kMove, self.current_motion_id, total_size
-                            )
-                            header_bytes = response_header.to_bytes()
-                            response_data = struct.pack("<B3x", MoveStatus.kSuccess.value)
-                            self.client_socket.sendall(header_bytes + response_data)
-                            logger.info(
-                                f"Sent Move success response for motion ID: \
-                                  {self.current_motion_id}"
-                            )
-                            self.current_motion_id = 0  # Reset motion ID after sending response
+                        # End motion once (also sends final Move response)
+                        self.end_current_motion(MoveStatus.kSuccess)
                         continue
 
                     # Update Genesis simulator based on control mode
@@ -522,14 +510,7 @@ class FrankaSimServer:
             logger.info("Stopped robot state transmission")
 
             # Send Move response to break the waiting loop in the client
-            if self.current_motion_id:
-                # Create a Move response header
-                move_response_header = MessageHeader(Command.kMove, self.current_motion_id, 16)
-                move_header_bytes = move_response_header.to_bytes()
-                move_response_data = struct.pack("<B3x", MoveStatus.kSuccess)
-                client_socket.sendall(move_header_bytes + move_response_data)
-                logger.info(f"Sent Move success response for motion ID: {self.current_motion_id}")
-                self.current_motion_id = 0
+            self.end_current_motion(MoveStatus.kSuccess)
 
             # Set connection_running to False instead of self.running
             self.connection_running = False
@@ -669,7 +650,6 @@ class FrankaSimServer:
                 logger.info(
                     f"Processing command: {Command(header.command).name} (ID: {header.command_id})"
                 )
-
                 if header.command == Command.kMove:
                     logger.debug(f"Move command payload size: {len(payload)} bytes")
                     logger.debug(f"Move command payload hex: {payload.hex()}")
@@ -686,6 +666,28 @@ class FrankaSimServer:
                 elif header.command == Command.kSetCartesianImpedance:
                     logger.info("Handling SetCartesianImpedance command")
                     self.handle_set_cartesian_impedance_command(client_socket, header, payload)
+                # elif header.command == Command.kLoadModelLibrary:
+                #     total_size = 12 + 4  # header + status + padding
+                #     response_header = MessageHeader(
+                #         Command.kLoadModelLibrary, header.command_id, total_size
+                #     )
+                #     header_bytes = response_header.to_bytes()
+                #     response_data = struct.pack("<B3x", 0)  # status = success
+                #     client_socket.sendall(header_bytes + response_data)
+                #     logger.info("Sent LoadModelLibrary success response")
+                elif header.command == Command.kGetRobotModel:
+                    # TODO: This is now very hardcoded!
+                    with open("urdf/panda_modified.urdf", "r") as f:
+                        urdf_str = f.read()
+                    urdf_bytes = urdf_str.encode("utf-8")
+
+                    # payload = status(1B) + urdf bytes
+                    payload = struct.pack("<B", 0) + urdf_bytes
+
+                    total_size = 12 + len(payload)
+                    response_header = MessageHeader(Command.kGetRobotModel, header.command_id, total_size)
+                    client_socket.sendall(response_header.to_bytes() + payload)
+                    logger.info("Sent GetRobotModel success response")
                 else:
                     logger.warning(
                         f"Unhandled command in TCP thread: {Command(header.command).name}"
@@ -787,6 +789,31 @@ class FrankaSimServer:
                 except Exception as e:
                     logger.error(f"Error closing UDP socket: {e}")
                 self.udp_socket = None
+
+    def end_current_motion(self, status: MoveStatus = MoveStatus.kSuccess):
+        """End current motion exactly once; safe to call from any thread."""
+        # Nothing to end
+        if not self.current_motion_id or not self.client_socket:
+            return
+
+        motion_id = self.current_motion_id
+        self.current_motion_id = 0  # clear first to prevent double-end from other thread
+
+        # Reset robot modes to idle
+        self.robot_state.state["motion_generator_mode"] = 0  # kIdle
+        self.robot_state.state["controller_mode"] = 3        # kOther
+        self.robot_state.state["robot_mode"] = RobotMode.kIdle
+
+        # Send final Move response once
+        try:
+            total_size = 12 + 4
+            resp_header = MessageHeader(Command.kMove, motion_id, total_size)
+            resp_data = struct.pack("<B3x", status.value)
+            self.client_socket.sendall(resp_header.to_bytes() + resp_data)
+            logger.info(f"Sent Move final response: motion_id={motion_id}, status={status.name}")
+        except Exception as e:
+            logger.error(f"Failed to send final Move response for motion_id={motion_id}: {e}")
+
 
     def start_robot_state_transmission(self, client_address: str, client_udp_port: int):
         """

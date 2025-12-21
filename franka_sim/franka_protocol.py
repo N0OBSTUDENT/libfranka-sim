@@ -7,8 +7,11 @@ COMMAND_PORT = 1337
 
 
 class Command(enum.IntEnum):
+    # TODO: Different versions have different command enum. Now it's a temporary fix.
+    # Just look at the commit here:
+    # https://github.com/frankarobotics/libfranka-common/commit/d5a9738aee5ecae3bb02ce4f69a93a5debde365c
+    # WHY WOULD SOMEONE CUT AN ENUM VALUE AND REUSE IT FOR SOMETHING ELSE???
     """Commands supported by the Franka robot interface protocol"""
-
     kConnect = 0
     kMove = 1
     kStopMove = 2
@@ -20,8 +23,8 @@ class Command(enum.IntEnum):
     kSetNEToEE = 8
     kSetLoad = 9
     kAutomaticErrorRecovery = 10
-    kLoadModelLibrary = 11
-    kGetRobotModel = 12
+    # kLoadModelLibrary = 11
+    kGetRobotModel = 11
 
 
 class ConnectStatus(enum.IntEnum):
