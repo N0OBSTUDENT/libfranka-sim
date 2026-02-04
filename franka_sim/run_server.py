@@ -5,7 +5,8 @@ import logging
 from franka_sim import FrankaSimServer
 
 # Configure logging to silence Numba debug output
-logging.getLogger("numba").setLevel(logging.WARNING)
+logging.getLogger("numba").setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.INFO)
 
 
 def main():

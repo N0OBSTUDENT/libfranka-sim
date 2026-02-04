@@ -11,10 +11,16 @@ from pathlib import Path
 import genesis as gs
 import numpy as np
 
+from typing import Callable
+
+from .scenes.force_test_scene import init_scene
+
 # import pinocchio as pin
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
+SceneInitFunc = Callable[[gs.Scene], None]
 
 class ControlMode(Enum):
     POSITION = "position"
@@ -24,16 +30,28 @@ class ControlMode(Enum):
 
 
 class FrankaGenesisSim:
-    def __init__(self, enable_vis=False):
+    def __init__(self, enable_vis : bool = False):
         self.enable_vis = enable_vis
         self.scene = None
-        self.franka = None
+        self.franka_left = None
+        self.franka_right = None
         self.model = None
         self.data = None
         self.running = False
-        self.latest_torques = np.zeros(7)
-        self.latest_joint_positions = np.zeros(7)
-        self.latest_joint_velocities = np.zeros(7)
+        
+        # Separate state tracking for left and right robots
+        self.latest_torques_left = np.zeros(7)
+        self.latest_joint_positions_left = np.zeros(7)
+        self.latest_joint_velocities_left = np.zeros(7)
+        self.latest_torques_right = np.zeros(7)
+        self.latest_joint_positions_right = np.zeros(7)
+        self.latest_joint_velocities_right = np.zeros(7)
+        
+        # Backward compatibility - use left robot as default
+        self.latest_torques = self.latest_torques_left
+        self.latest_joint_positions = self.latest_joint_positions_left
+        self.latest_joint_velocities = self.latest_joint_velocities_left
+        
         self.torque_lock = threading.Lock()
         self.joint_position_lock = threading.Lock()
         self.joint_velocity_lock = threading.Lock()
@@ -86,9 +104,25 @@ class FrankaGenesisSim:
 
         # Add entities
         self.scene.add_entity(gs.morphs.Plane())
-        self.franka = self.scene.add_entity(
+
+        init_scene(scene=self.scene)
+
+        self.base_frame_pos_left = np.array([-0.375,  -0.281, -0.025])
+        self.base_frame_pos_right = np.array([-0.375,  0.281, -0.025])
+
+        self.franka_left = self.scene.add_entity(
             gs.morphs.MJCF(
                 file=str(self.xml_path),
+                pos = self.base_frame_pos_left
+            ),
+            material=gs.materials.Rigid(gravity_compensation=1.0),
+        )
+
+
+        self.franka_right = self.scene.add_entity(
+            gs.morphs.MJCF(
+                file=str(self.xml_path),
+                pos = self.base_frame_pos_right
             ),
             material=gs.materials.Rigid(gravity_compensation=1.0),
         )
@@ -96,12 +130,8 @@ class FrankaGenesisSim:
         # Build scene
         self.scene.build()
 
-        # Load Pinocchio model
-        # TODO: load pinocchio model
-        # self.model, self.data = self.load_panda_model()
-
         # Joint names and indices
-        self.jnt_names = [
+        self.jnt_names_left = [
             "joint1",
             "joint2",
             "joint3",
@@ -112,23 +142,57 @@ class FrankaGenesisSim:
             "finger_joint1",
             "finger_joint2",
         ]
-        self.dofs_idx = [self.franka.get_joint(name).dofs_idx_local[0] for name in self.jnt_names]
+        self.dofs_idx_left = [self.franka_left.get_joint(name).dofs_idx_local[0] for name in self.jnt_names_left]
 
         # Set force range for safety
-        self.franka.set_dofs_force_range(
+        self.franka_left.set_dofs_force_range(
             lower=np.array([-87, -87, -87, -87, -12, -12, -12, -100, -100]),
             upper=np.array([87, 87, 87, 87, 12, 12, 12, 100, 100]),
-            dofs_idx_local=self.dofs_idx,
+            dofs_idx_local=self.dofs_idx_left,
         )
 
-        # Initialize to default position
-        initial_q = np.array([0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785])
+        # Initialize to default position for left robot
+        initial_q_left = np.array([0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785])
         # Set the initial position as the target position for the controller
         with self.joint_position_lock:
-            self.latest_joint_positions = initial_q.copy()
+            self.latest_joint_positions_left = initial_q_left.copy()
+            # Update the reference to point to left robot
+            self.latest_joint_positions = self.latest_joint_positions_left
+
+        # Joint names and indices
+        self.jnt_names_right = [
+            "joint1",
+            "joint2",
+            "joint3",
+            "joint4",
+            "joint5",
+            "joint6",
+            "joint7",
+            "finger_joint1",
+            "finger_joint2",
+        ]
+        self.dofs_idx_right = [self.franka_right.get_joint(name).dofs_idx_local[0] for name in self.jnt_names_right]
+
+        # Set force range for safety
+        self.franka_right.set_dofs_force_range(
+            lower=np.array([-87, -87, -87, -87, -12, -12, -12, -100, -100]),
+            upper=np.array([87, 87, 87, 87, 12, 12, 12, 100, 100]),
+            dofs_idx_local=self.dofs_idx_right,
+        )
+
+        # Initialize to default position for right robot
+        initial_q_right = np.array([0.0, 0.0, 0.0, -1.57, 0.0, 1.57, 0.785])
+        # Set the initial position for right robot (separate from left)
+        self.latest_joint_positions_right = initial_q_right.copy()
 
         for _ in range(100):
-            self.franka.set_dofs_position(np.concatenate([initial_q, [0.04, 0.04]]), self.dofs_idx)
+            self.franka_left.set_dofs_position(np.concatenate([initial_q_left, [0.04, 0.04]]), self.dofs_idx_left)
+            self.franka_right.set_dofs_position(np.concatenate([initial_q_right, [0.04, 0.04]]), self.dofs_idx_right)
+            # logger.info(f"DOFs position: {self.franka_left.get_dofs_position(self.dofs_idx_left).cpu().numpy()}")
+            # hand_link = self.franka_left.get_link("hand")
+            # ee_pos = hand_link.get_pos().cpu().numpy()
+            # ee_quat = hand_link.get_quat().cpu().numpy()
+            # logger.info(f"End effector position: {ee_pos}, orientation: {ee_quat}")
             self.scene.step()
 
     def set_control_mode(self, mode: ControlMode):
@@ -159,6 +223,7 @@ class FrankaGenesisSim:
         """Main simulation loop"""
         logger.info("Starting Genesis simulation loop")
 
+
         # For numerical differentiation
         self.prev_dq_full = np.zeros(9)
         self.ddq_filtered = np.zeros(9)
@@ -166,8 +231,8 @@ class FrankaGenesisSim:
 
         while self.running:
             # Get current joint states
-            q_full = self.franka.get_dofs_position(self.dofs_idx).cpu().numpy()
-            dq_full = self.franka.get_dofs_velocity(self.dofs_idx).cpu().numpy()
+            q_full = self.franka_left.get_dofs_position(self.dofs_idx_left).cpu().numpy()
+            dq_full = self.franka_left.get_dofs_velocity(self.dofs_idx_left).cpu().numpy()
 
             # Calculate acceleration
             ddq_raw = (dq_full - self.prev_dq_full) / self.dt
@@ -183,19 +248,19 @@ class FrankaGenesisSim:
                 with self.joint_position_lock:
                     q_d = self.latest_joint_positions.copy()
                 q_cmd = np.concatenate([q_d, [0.04, 0.04]])
-                self.franka.control_dofs_position(q_cmd, self.dofs_idx)
+                self.franka_left.control_dofs_position(q_cmd, self.dofs_idx_left)
 
             elif current_mode == ControlMode.VELOCITY:
                 with self.joint_velocity_lock:
                     dq_d = self.latest_joint_velocities.copy()
                 dq_cmd = np.concatenate([dq_d, [0.0, 0.0]])
-                self.franka.control_dofs_velocity(dq_cmd, self.dofs_idx)
+                self.franka_left.control_dofs_velocity(dq_cmd, self.dofs_idx_left)
 
             elif current_mode == ControlMode.TORQUE:
                 with self.torque_lock:
                     tau_d = self.latest_torques.copy()
                 tau_cmd = np.concatenate([tau_d, [0.0, 0.0]])
-                self.franka.control_dofs_force(tau_cmd, self.dofs_idx)
+                self.franka_left.control_dofs_force(tau_cmd, self.dofs_idx_left)
 
             # Step simulation
             self.scene.step()
@@ -203,8 +268,8 @@ class FrankaGenesisSim:
             # Optional: Add small sleep to prevent too high CPU usage
             time.sleep(0.001)
 
-        if self.enable_vis:
-            self.scene.viewer.stop()
+
+            
 
     def start(self):
         """Start the simulation"""
@@ -221,7 +286,7 @@ class FrankaGenesisSim:
             else:
                 self.run_simulation()
             # Run viewer in main thread
-            self.scene.viewer.start()
+            # self.scene.viewer.start()
         else:
             # Without visualization, just run simulation in current thread
             self.run_simulation()
@@ -229,6 +294,7 @@ class FrankaGenesisSim:
     def stop(self):
         """Stop the simulation"""
         self.running = False
+        self.scene.stop_recording()
         if self.enable_vis:
             self.scene.viewer.stop()
         if self.sim_thread:
@@ -239,16 +305,21 @@ class FrankaGenesisSim:
         # q_d is the desired joint positions user sent joint positions
         q_d = self.latest_joint_positions
 
-        q_full = self.franka.get_dofs_position(self.dofs_idx).cpu().numpy()
-        dq_full = self.franka.get_dofs_velocity(self.dofs_idx).cpu().numpy()
+        q_full = self.franka_left.get_dofs_position(self.dofs_idx_left).cpu().numpy()
+        dq_full = self.franka_left.get_dofs_velocity(self.dofs_idx_left).cpu().numpy()
         # calculate ddq_full
         ddq_full = self.ddq_filtered
 
         # Get end-effector position and orientation
-        hand_link = self.franka.get_link("hand")
-        ee_pos = hand_link.get_pos().cpu().numpy()
+        hand_link = self.franka_left.get_link("hand")
+        ee_pos_world = hand_link.get_pos().cpu().numpy()
         ee_quat = hand_link.get_quat().cpu().numpy()  # [x, y, z, w]
 
+        # Convert end-effector position from world frame to robot base frame
+        ee_pos = ee_pos_world - self.base_frame_pos_left
+        
+        logger.debug(f"ee_pos_world: {ee_pos_world}, base_pos: {self.base_frame_pos_left}, ee_pos_relative: {ee_pos}")
+        
         # Convert quaternion to rotation matrix
         # Note: quaternion from Genesis is [x, y, z, w]
         x, y, z, w = ee_quat
@@ -260,10 +331,10 @@ class FrankaGenesisSim:
             ]
         )
 
-        # Construct homogeneous transformation matrix
+        # Construct homogeneous transformation matrix with corrected position
         O_T_EE = np.eye(4)
         O_T_EE[:3, :3] = R
-        O_T_EE[:3, 3] = ee_pos
+        O_T_EE[:3, 3] = ee_pos  # Use the corrected position relative to base
 
         # Convert to column-major 16-element array
         O_T_EE = O_T_EE.T.flatten()

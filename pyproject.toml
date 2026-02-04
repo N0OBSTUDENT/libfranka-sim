@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2", "numpy==1.26.4"]
+requires = ["setuptools>=77.0.0", "wheel", "setuptools_scm>=6.2", "numpy==1.26.4"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -28,11 +28,15 @@ classifiers = [
 ]
 
 dependencies = [
-  "numpy==1.26.4",
-  "genesis-world>=0.3.1",
-  "numba==0.60.0",
+  "numpy>=2.2.0",
+  "genesis-world==0.3.10",
+  "numba",
   "torch>=2.0.0",
   "pytest",
+  "matplotlib>=3.7.2",
+  "ipykernel>=6.0.0",
+  "jupyterlab>=4.0.0",
+  "pin==3.4.0",
 ]
 
 [project.urls]
@@ -52,6 +56,7 @@ dev = [
   "flake8-docstrings>=1.7.0",
   "pytest>=8.0.0",
   "pytest-cov>=4.1.0",
+  "ipykernel"
 ]
 
 [tool.setuptools]
@@ -94,7 +99,7 @@ platforms = ["linux-64"]
 franka-sim = { path = ".", editable = true }
 
 [tool.pixi.pypi-options]
-extra-index-urls = ["https://download.pytorch.org/whl/cu128"]
+# extra-index-urls = ["https://download.pytorch.org/whl/cu128"]
 
 # Optional but recommended: force these names to be resolved from the cu128 index.
 # [tool.pixi.pypi-options.extra-index-urls]
@@ -104,3 +109,7 @@ extra-index-urls = ["https://download.pytorch.org/whl/cu128"]
 
 [tool.pixi.environments]
 default = { features = [] }
+
+[tool.pixi.tasks.jupyterlab]
+args = [{"arg" = "port", "default" = "6657"}]
+cmd = "jupyter lab --port {{port}}"
